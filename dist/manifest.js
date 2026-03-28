@@ -1,20 +1,23 @@
 const manifest = {
   manifestVersion: 1,
+  id: "telegram-notify",
+  apiVersion: 1,
   pluginKey: "telegram-notify",
   displayName: "Telegram Notifications",
   description: "Send Telegram notifications from Paperclip agents and receive messages from Telegram to wake agents.",
   version: "1.0.0",
   author: "Premast Lab",
-  category: "notifications",
+  categories: ["notifications"],
   capabilities: [
     "events.subscribe",
     "agents.invoke",
-    "state.read",
-    "state.write",
-    "secrets.read",
-    "secrets.write",
-    "webhooks",
-    "ui.slots"
+    "plugin.state.read",
+    "plugin.state.write",
+    "secrets.read-ref",
+    "webhooks.receive",
+    "http.outbound",
+    "ui.detailTab.register",
+    "agents.read"
   ],
   instanceConfigSchema: {
     type: "object",
@@ -36,9 +39,11 @@ const manifest = {
   ui: {
     slots: [
       {
-        slotType: "agent.settings.tab",
-        tabLabel: "Telegram",
-        componentKey: "AgentTelegramTab"
+        type: "detailTab",
+        id: "telegram-agent-tab",
+        displayName: "Telegram",
+        exportName: "AgentTelegramTab",
+        entityTypes: ["agent"]
       }
     ]
   },
