@@ -35,4 +35,13 @@ await esbuild.build({
   sourcemap: true,
 });
 
+// Build manifest (separate bundle, not minified)
+await esbuild.build({
+  ...sharedOptions,
+  entryPoints: ["src/manifest.ts"],
+  outfile: "dist/manifest.js",
+  bundle: false,
+  logLevel: "info",
+});
+
 console.log("✅ Build complete");
