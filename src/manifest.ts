@@ -10,7 +10,7 @@ const manifest: PaperclipPluginManifestV1 = {
     "Send Telegram notifications from Paperclip agents and receive messages from Telegram to wake agents.",
   version: "1.0.0",
   author: "Premast Lab",
-  categories: ["notifications"],
+  categories: ["connector"],
   capabilities: [
     "events.subscribe",
     "agents.invoke",
