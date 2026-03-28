@@ -21,6 +21,7 @@ const manifest: PaperclipPluginManifestV1 = {
     "http.outbound",
     "ui.page.register",
     "ui.sidebar.register",
+    "agent.tools.register",
   ],
   instanceConfigSchema: {
     type: "object",

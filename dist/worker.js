@@ -38,28 +38,89 @@ var STATE_CHAT_ID = "telegram-chat-id";
 var STATE_ENABLED = "telegram-enabled";
 var STATE_CHAT_MAPPING = "telegram-chat-agent-mapping";
 var plugin = definePlugin({
-  async setup(ctx) {
-    ctx.logger.info("Telegram plugin starting up");
-    ctx.events.on("agent.run.finished", async (event) => {
+  async setup(ctx2) {
+    ctx2.logger.info("Telegram plugin starting up");
+    ctx2.tools.register("send-telegram", {
+      displayName: "Send Telegram Message",
+      description: "Send a message to Momen on Telegram. Use this when you need human input, are blocked, completed a major task, or want to share an important update.",
+      parametersSchema: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "The message to send. Be concise and clear. Include context about what you need or what happened."
+          },
+          urgent: {
+            type: "boolean",
+            description: "Set to true if this requires immediate attention (blocked, waiting for approval, critical error)."
+          }
+        },
+        required: ["message"]
+      }
+    }, async (params, toolCtx) => {
+      const { message, urgent } = params;
+      const botToken = await ctx2.secrets.read("telegram-bot-token");
+      if (!botToken) {
+        return {
+          content: "Telegram not configured: bot token missing.",
+          data: { ok: false, error: "no_bot_token" }
+        };
+      }
+      const agentId = toolCtx.agentId;
+      const chatId = await ctx2.state.get({
+        scopeKind: "agent",
+        scopeId: agentId,
+        stateKey: STATE_CHAT_ID
+      });
+      if (!chatId) {
+        return {
+          content: "Telegram not configured for this agent: no Chat ID set. Ask Momen to configure it at /ORGA/telegram.",
+          data: { ok: false, error: "no_chat_id" }
+        };
+      }
+      let agentName = "Agent";
+      try {
+        const agents = await ctx2.agents.list({ companyId: toolCtx.companyId });
+        const agent = agents.find((a) => a.id === agentId);
+        if (agent) agentName = agent.name;
+      } catch {
+      }
+      const urgentPrefix = urgent ? "\u{1F6A8} " : "";
+      const formattedMessage = `${urgentPrefix}\u{1F916} <b>${agentName}</b>
+
+${message}`;
+      const result = await sendTelegramMessage(botToken, chatId, formattedMessage);
+      if (!result.ok) {
+        return {
+          content: `Failed to send Telegram message: ${result.description}`,
+          data: { ok: false, error: result.description }
+        };
+      }
+      return {
+        content: `Telegram message sent to Momen successfully.`,
+        data: { ok: true, messageId: result.result?.message_id }
+      };
+    });
+    ctx2.events.on("agent.run.finished", async (event) => {
       const agentId = event.entityId;
       if (!agentId) return;
-      const enabled = await ctx.state.get({
+      const enabled = await ctx2.state.get({
         scopeKind: "agent",
         scopeId: agentId,
         stateKey: STATE_ENABLED
       });
       if (!enabled) return;
-      const chatId = await ctx.state.get({
+      const chatId = await ctx2.state.get({
         scopeKind: "agent",
         scopeId: agentId,
         stateKey: STATE_CHAT_ID
       });
       if (!chatId) return;
-      const botToken = await ctx.secrets.read("telegram-bot-token");
+      const botToken = await ctx2.secrets.read("telegram-bot-token");
       if (!botToken) return;
       let agentName = "Agent";
       try {
-        const agents = await ctx.agents.list({ companyId: event.companyId });
+        const agents = await ctx2.agents.list({ companyId: event.companyId });
         const agent = agents.find((a) => a.id === agentId);
         if (agent) agentName = agent.name;
       } catch {
@@ -76,13 +137,13 @@ var plugin = definePlugin({
       try {
         await sendTelegramMessage(botToken, chatId, message);
       } catch (err) {
-        ctx.logger.error("Failed to send Telegram notification", { err });
+        ctx2.logger.error("Failed to send Telegram notification", { err });
       }
     });
-    ctx.data.register("agents-list", async ({ companyId }) => {
+    ctx2.data.register("agents-list", async ({ companyId }) => {
       if (!companyId) return [];
       try {
-        const agents = await ctx.agents.list({ companyId: String(companyId) });
+        const agents = await ctx2.agents.list({ companyId: String(companyId) });
         return agents.map((a) => ({
           id: a.id,
           name: a.name,
@@ -93,17 +154,17 @@ var plugin = definePlugin({
         return [];
       }
     });
-    ctx.data.register("all-agent-configs", async ({ companyId }) => {
+    ctx2.data.register("all-agent-configs", async ({ companyId }) => {
       if (!companyId) return {};
       try {
-        const agents = await ctx.agents.list({ companyId: String(companyId) });
+        const agents = await ctx2.agents.list({ companyId: String(companyId) });
         const result = {};
         for (const agent of agents) {
-          const enabled = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: STATE_ENABLED });
-          const chatId = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: STATE_CHAT_ID });
-          const notifyOnComplete = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-complete" });
-          const notifyOnFail = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-fail" });
-          const notifyOnBlocked = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-blocked" });
+          const enabled = await ctx2.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: STATE_ENABLED });
+          const chatId = await ctx2.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: STATE_CHAT_ID });
+          const notifyOnComplete = await ctx2.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-complete" });
+          const notifyOnFail = await ctx2.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-fail" });
+          const notifyOnBlocked = await ctx2.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-blocked" });
           result[agent.id] = {
             enabled: !!enabled,
             chatId: chatId || null,
@@ -117,29 +178,33 @@ var plugin = definePlugin({
         return {};
       }
     });
-    ctx.data.register("agent-telegram-config", async ({ agentId }) => {
+    ctx2.data.register("agent-telegram-config", async ({ agentId }) => {
       if (!agentId) return { enabled: false, chatId: null };
-      const enabled = await ctx.state.get({ scopeKind: "agent", scopeId: String(agentId), stateKey: STATE_ENABLED });
-      const chatId = await ctx.state.get({ scopeKind: "agent", scopeId: String(agentId), stateKey: STATE_CHAT_ID });
+      const enabled = await ctx2.state.get({ scopeKind: "agent", scopeId: String(agentId), stateKey: STATE_ENABLED });
+      const chatId = await ctx2.state.get({ scopeKind: "agent", scopeId: String(agentId), stateKey: STATE_CHAT_ID });
       return { enabled: !!enabled, chatId: chatId || null };
     });
-    ctx.actions.register("save-agent-telegram-config", async (params) => {
+    ctx2.actions.register("save-agent-telegram-config", async (params) => {
       const { agentId, chatId, enabled, notifyOnComplete, notifyOnFail, notifyOnBlocked } = params;
       if (!agentId) throw new Error("agentId required");
-      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_ENABLED }, enabled ? "1" : "");
-      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-complete" }, notifyOnComplete ? "1" : "0");
-      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-fail" }, notifyOnFail ? "1" : "0");
-      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-blocked" }, notifyOnBlocked ? "1" : "0");
+      await ctx2.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_ENABLED }, enabled ? "1" : "");
+      await ctx2.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-complete" }, notifyOnComplete ? "1" : "0");
+      await ctx2.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-fail" }, notifyOnFail ? "1" : "0");
+      await ctx2.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-blocked" }, notifyOnBlocked ? "1" : "0");
       if (chatId) {
-        await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_CHAT_ID }, chatId);
-        await ctx.state.set({ scopeKind: "instance", scopeId: "global", stateKey: `${STATE_CHAT_MAPPING}-${chatId}` }, agentId);
+        await ctx2.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_CHAT_ID }, chatId);
+        await ctx2.state.set({ scopeKind: "instance", scopeId: "global", stateKey: `${STATE_CHAT_MAPPING}-${chatId}` }, agentId);
+      }
+      const companyIdParam = params.companyId;
+      if (companyIdParam) {
+        await ctx2.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-company-id" }, companyIdParam);
       }
       return { ok: true };
     });
-    ctx.actions.register("send-test-message", async (params) => {
+    ctx2.actions.register("send-test-message", async (params) => {
       const { chatId } = params;
       if (!chatId) throw new Error("chatId required");
-      const botToken = await ctx.secrets.read("telegram-bot-token");
+      const botToken = await ctx2.secrets.read("telegram-bot-token");
       if (!botToken) throw new Error("Bot token not configured. Go to plugin settings.");
       const result = await sendTelegramMessage(
         botToken,
@@ -149,17 +214,17 @@ var plugin = definePlugin({
       if (!result.ok) throw new Error(result.description || "Failed to send message");
       return { ok: true };
     });
-    ctx.actions.register("configure-webhook", async (params) => {
+    ctx2.actions.register("configure-webhook", async (params) => {
       const { paperclipUrl, pluginId } = params;
-      const botToken = await ctx.secrets.read("telegram-bot-token");
+      const botToken = await ctx2.secrets.read("telegram-bot-token");
       if (!botToken) throw new Error("Bot token not configured");
       const webhookUrl = `${paperclipUrl}/api/plugins/${pluginId}/webhooks/telegram`;
       const result = await setWebhook(botToken, webhookUrl);
       if (!result.ok) throw new Error(result.description || "Failed to set webhook");
       return { ok: true, webhookUrl };
     });
-    ctx.actions.register("get-bot-info", async () => {
-      const botToken = await ctx.secrets.read("telegram-bot-token");
+    ctx2.actions.register("get-bot-info", async () => {
+      const botToken = await ctx2.secrets.read("telegram-bot-token");
       if (!botToken) throw new Error("Bot token not configured");
       const result = await getBotInfo(botToken);
       if (!result.ok || !result.result) throw new Error("Failed to get bot info");
@@ -201,28 +266,40 @@ var plugin = definePlugin({
     }
     const chatId = String(update.message.chat.id);
     const text = update.message.text;
-    const fromName = update.message.from?.first_name || "User";
-    const agentId = await (async () => {
-      try {
-        const val = await plugin.__ctx?.state?.get({
-          scopeKind: "instance",
-          scopeId: "global",
-          stateKey: `${STATE_CHAT_MAPPING}-${chatId}`
-        });
-        return val;
-      } catch {
-        return null;
-      }
-    })();
+    const fromName = update.message.from?.first_name || "Momen";
+    ctx.logger.info("Telegram message received", { chatId, text: text.slice(0, 100) });
+    const agentId = await ctx.state.get({
+      scopeKind: "instance",
+      scopeId: "global",
+      stateKey: `${STATE_CHAT_MAPPING}-${chatId}`
+    });
     if (!agentId) {
+      ctx.logger.warn("No agent mapped to chat", { chatId });
       return { status: 200, body: { ok: true } };
     }
+    await ctx.state.set(
+      { scopeKind: "agent", scopeId: agentId, stateKey: "telegram-pending-message" },
+      JSON.stringify({ chatId, text, fromName, timestamp: Date.now() })
+    );
     try {
-      await plugin.__ctx?.state?.set(
-        { scopeKind: "agent", scopeId: agentId, stateKey: "telegram-pending-message" },
-        JSON.stringify({ chatId, text, fromName, timestamp: Date.now() })
-      );
+      const companyId = await ctx.state.get({
+        scopeKind: "agent",
+        scopeId: agentId,
+        stateKey: "telegram-company-id"
+      });
+      if (companyId) {
+        await ctx.agents.invoke(agentId, companyId, {
+          wakeReason: "telegram_message",
+          wakeContext: {
+            telegramMessage: text,
+            telegramFrom: fromName,
+            telegramChatId: chatId
+          }
+        });
+        ctx.logger.info("Agent woken via Telegram message", { agentId });
+      }
     } catch (err) {
+      ctx.logger.warn("Could not invoke agent directly, message stored in state", { agentId, err });
     }
     return { status: 200, body: { ok: true } };
   }

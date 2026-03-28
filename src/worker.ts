@@ -15,6 +15,78 @@ const plugin = definePlugin({
   async setup(ctx) {
     ctx.logger.info("Telegram plugin starting up");
 
+    // ─── Agent Tool: send-telegram ───
+    // Agents can call this tool directly during heartbeats
+    ctx.tools.register("send-telegram", {
+      displayName: "Send Telegram Message",
+      description: "Send a message to Momen on Telegram. Use this when you need human input, are blocked, completed a major task, or want to share an important update.",
+      parametersSchema: {
+        type: "object",
+        properties: {
+          message: {
+            type: "string",
+            description: "The message to send. Be concise and clear. Include context about what you need or what happened.",
+          },
+          urgent: {
+            type: "boolean",
+            description: "Set to true if this requires immediate attention (blocked, waiting for approval, critical error).",
+          },
+        },
+        required: ["message"],
+      },
+    }, async (params, toolCtx) => {
+      const { message, urgent } = params as { message: string; urgent?: boolean };
+
+      // Get bot token
+      const botToken = await ctx.secrets.read("telegram-bot-token");
+      if (!botToken) {
+        return {
+          content: "Telegram not configured: bot token missing.",
+          data: { ok: false, error: "no_bot_token" },
+        };
+      }
+
+      // Get agent's configured chat ID
+      const agentId = toolCtx.agentId;
+      const chatId = await ctx.state.get({
+        scopeKind: "agent",
+        scopeId: agentId,
+        stateKey: STATE_CHAT_ID,
+      });
+
+      if (!chatId) {
+        return {
+          content: "Telegram not configured for this agent: no Chat ID set. Ask Momen to configure it at /ORGA/telegram.",
+          data: { ok: false, error: "no_chat_id" },
+        };
+      }
+
+      // Get agent name for context
+      let agentName = "Agent";
+      try {
+        const agents = await ctx.agents.list({ companyId: toolCtx.companyId });
+        const agent = agents.find((a: { id: string; name: string }) => a.id === agentId);
+        if (agent) agentName = agent.name;
+      } catch { /* ignore */ }
+
+      const urgentPrefix = urgent ? "🚨 " : "";
+      const formattedMessage = `${urgentPrefix}🤖 <b>${agentName}</b>\n\n${message}`;
+
+      const result = await sendTelegramMessage(botToken, chatId as string, formattedMessage);
+
+      if (!result.ok) {
+        return {
+          content: `Failed to send Telegram message: ${result.description}`,
+          data: { ok: false, error: result.description },
+        };
+      }
+
+      return {
+        content: `Telegram message sent to Momen successfully.`,
+        data: { ok: true, messageId: result.result?.message_id },
+      };
+    });
+
     // ─── Event: agent run finished → send Telegram notification ───
     ctx.events.on("agent.run.finished", async (event) => {
       const agentId = event.entityId;
@@ -131,6 +203,11 @@ const plugin = definePlugin({
         await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_CHAT_ID }, chatId);
         await ctx.state.set({ scopeKind: "instance", scopeId: "global", stateKey: `${STATE_CHAT_MAPPING}-${chatId}` }, agentId);
       }
+      // Store companyId for webhook-triggered invocation
+      const companyIdParam = (params as Record<string, unknown>).companyId as string | undefined;
+      if (companyIdParam) {
+        await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-company-id" }, companyIdParam);
+      }
 
       return { ok: true };
     });
@@ -220,38 +297,49 @@ const plugin = definePlugin({
 
     const chatId = String(update.message.chat.id);
     const text = update.message.text;
-    const fromName = update.message.from?.first_name || "User";
+    const fromName = update.message.from?.first_name || "Momen";
+
+    ctx.logger.info("Telegram message received", { chatId, text: text.slice(0, 100) });
 
     // Look up which agent is mapped to this chat
-    const agentId = await (async () => {
-      try {
-        const val = await (plugin as any).__ctx?.state?.get({
-          scopeKind: "instance",
-          scopeId: "global",
-          stateKey: `${STATE_CHAT_MAPPING}-${chatId}`,
-        });
-        return val as string | null;
-      } catch {
-        return null;
-      }
-    })();
+    const agentId = await ctx.state.get({
+      scopeKind: "instance",
+      scopeId: "global",
+      stateKey: `${STATE_CHAT_MAPPING}-${chatId}`,
+    }) as string | null;
 
     if (!agentId) {
-      // No agent mapped to this chat — ignore silently
+      ctx.logger.warn("No agent mapped to chat", { chatId });
       return { status: 200, body: { ok: true } };
     }
 
-    // Wake the agent with the message as context
+    // Store the message in agent state
+    await ctx.state.set(
+      { scopeKind: "agent", scopeId: agentId, stateKey: "telegram-pending-message" },
+      JSON.stringify({ chatId, text, fromName, timestamp: Date.now() })
+    );
+
+    // Wake the agent immediately
     try {
-      // We need companyId — get it from the agent mapping state
-      // For now, log and rely on the agent's next heartbeat to pick it up
-      // Store the message in state for the agent to read
-      await (plugin as any).__ctx?.state?.set(
-        { scopeKind: "agent", scopeId: agentId, stateKey: "telegram-pending-message" },
-        JSON.stringify({ chatId, text, fromName, timestamp: Date.now() })
-      );
+      const companyId = await ctx.state.get({
+        scopeKind: "agent",
+        scopeId: agentId,
+        stateKey: "telegram-company-id",
+      }) as string | null;
+
+      if (companyId) {
+        await ctx.agents.invoke(agentId, companyId, {
+          wakeReason: "telegram_message",
+          wakeContext: {
+            telegramMessage: text,
+            telegramFrom: fromName,
+            telegramChatId: chatId,
+          },
+        });
+        ctx.logger.info("Agent woken via Telegram message", { agentId });
+      }
     } catch (err) {
-      // ignore state errors
+      ctx.logger.warn("Could not invoke agent directly, message stored in state", { agentId, err });
     }
 
     return { status: 200, body: { ok: true } };
