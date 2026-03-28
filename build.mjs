@@ -2,7 +2,6 @@ import * as esbuild from "esbuild";
 import { readFileSync } from "fs";
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf8"));
-const isWatch = process.argv.includes("--watch");
 
 const sharedOptions = {
   bundle: true,
@@ -21,21 +20,7 @@ await esbuild.build({
   logLevel: "info",
 });
 
-// Build UI (browser target)
-await esbuild.build({
-  entryPoints: ["src/ui/AgentTelegramTab.tsx"],
-  bundle: true,
-  platform: "browser",
-  format: "esm",
-  target: "es2020",
-  outfile: "dist/ui/AgentTelegramTab.js",
-  external: ["react", "react-dom", "@paperclipai/plugin-sdk"],
-  jsx: "automatic",
-  logLevel: "info",
-  sourcemap: true,
-});
-
-// Build manifest (separate bundle, not minified)
+// Build manifest
 await esbuild.build({
   ...sharedOptions,
   entryPoints: ["src/manifest.ts"],
@@ -43,5 +28,40 @@ await esbuild.build({
   bundle: false,
   logLevel: "info",
 });
+
+// Build UI (browser target) - settings page
+await esbuild.build({
+  entryPoints: ["src/ui/TelegramSettingsPage.tsx"],
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  target: "es2020",
+  outfile: "dist/ui/TelegramSettingsPage.js",
+  external: ["react", "react-dom", "react/jsx-runtime", "@paperclipai/plugin-sdk"],
+  jsx: "automatic",
+  logLevel: "info",
+  sourcemap: true,
+});
+
+// Build UI - sidebar link
+await esbuild.build({
+  entryPoints: ["src/ui/TelegramSidebarLink.tsx"],
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  target: "es2020",
+  outfile: "dist/ui/TelegramSidebarLink.js",
+  external: ["react", "react-dom", "react/jsx-runtime", "@paperclipai/plugin-sdk"],
+  jsx: "automatic",
+  logLevel: "info",
+  sourcemap: true,
+});
+
+// Build UI index that re-exports all components
+import { writeFileSync } from "fs";
+writeFileSync("dist/ui/index.js", `
+export { TelegramSettingsPage } from './TelegramSettingsPage.js';
+export { TelegramSidebarLink } from './TelegramSidebarLink.js';
+`);
 
 console.log("✅ Build complete");

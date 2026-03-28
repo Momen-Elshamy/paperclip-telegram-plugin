@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/ui/TelegramSidebarLink.tsx"],
+  "sourcesContent": ["import React from \"react\";\nimport { useHostContext } from \"@paperclipai/plugin-sdk/ui/hooks\";\n\nexport function TelegramSidebarLink() {\n  const { company, navigate } = useHostContext();\n  const companyPrefix = company?.issuePrefix;\n\n  const handleClick = () => {\n    if (companyPrefix && navigate) {\n      navigate(`/${companyPrefix}/telegram`);\n    }\n  };\n\n  return (\n    <button\n      onClick={handleClick}\n      style={{\n        display: \"flex\",\n        alignItems: \"center\",\n        gap: 8,\n        width: \"100%\",\n        padding: \"6px 12px\",\n        background: \"none\",\n        border: \"none\",\n        cursor: \"pointer\",\n        fontSize: 13,\n        color: \"inherit\",\n        textAlign: \"left\",\n        borderRadius: 6,\n      }}\n    >\n      <span>\uD83D\uDCEC</span>\n      <span>Telegram</span>\n    </button>\n  );\n}\n"],
+  "mappings": ";AACA,SAAS,sBAAsB;AAa3B,SAiBE,KAjBF;AAXG,SAAS,sBAAsB;AACpC,QAAM,EAAE,SAAS,SAAS,IAAI,eAAe;AAC7C,QAAM,gBAAgB,SAAS;AAE/B,QAAM,cAAc,MAAM;AACxB,QAAI,iBAAiB,UAAU;AAC7B,eAAS,IAAI,aAAa,WAAW;AAAA,IACvC;AAAA,EACF;AAEA,SACE;AAAA,IAAC;AAAA;AAAA,MACC,SAAS;AAAA,MACT,OAAO;AAAA,QACL,SAAS;AAAA,QACT,YAAY;AAAA,QACZ,KAAK;AAAA,QACL,OAAO;AAAA,QACP,SAAS;AAAA,QACT,YAAY;AAAA,QACZ,QAAQ;AAAA,QACR,QAAQ;AAAA,QACR,UAAU;AAAA,QACV,OAAO;AAAA,QACP,WAAW;AAAA,QACX,cAAc;AAAA,MAChB;AAAA,MAEA;AAAA,4BAAC,UAAK,uBAAE;AAAA,QACR,oBAAC,UAAK,sBAAQ;AAAA;AAAA;AAAA,EAChB;AAEJ;",
+  "names": []
+}

@@ -68,7 +68,46 @@ const plugin = definePlugin({
       }
     });
 
-    // ─── Data endpoint: get agent Telegram config (used by UI) ───
+    // ─── Data endpoint: list all agents ───
+    ctx.data.register("agents-list", async ({ companyId }) => {
+      if (!companyId) return [];
+      try {
+        const agents = await ctx.agents.list({ companyId: String(companyId) });
+        return agents.map((a: { id: string; name: string; role: string; status: string }) => ({
+          id: a.id, name: a.name, role: a.role, status: a.status,
+        }));
+      } catch {
+        return [];
+      }
+    });
+
+    // ─── Data endpoint: get ALL agent configs for a company ───
+    ctx.data.register("all-agent-configs", async ({ companyId }) => {
+      if (!companyId) return {};
+      try {
+        const agents = await ctx.agents.list({ companyId: String(companyId) });
+        const result: Record<string, object> = {};
+        for (const agent of agents) {
+          const enabled = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: STATE_ENABLED });
+          const chatId = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: STATE_CHAT_ID });
+          const notifyOnComplete = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-complete" });
+          const notifyOnFail = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-fail" });
+          const notifyOnBlocked = await ctx.state.get({ scopeKind: "agent", scopeId: agent.id, stateKey: "telegram-notify-blocked" });
+          result[agent.id] = {
+            enabled: !!enabled,
+            chatId: chatId || null,
+            notifyOnComplete: notifyOnComplete !== "0",
+            notifyOnFail: notifyOnFail !== "0",
+            notifyOnBlocked: notifyOnBlocked === "1",
+          };
+        }
+        return result;
+      } catch {
+        return {};
+      }
+    });
+
+    // ─── Data endpoint: get single agent Telegram config ───
     ctx.data.register("agent-telegram-config", async ({ agentId }) => {
       if (!agentId) return { enabled: false, chatId: null };
       const enabled = await ctx.state.get({ scopeKind: "agent", scopeId: String(agentId), stateKey: STATE_ENABLED });
@@ -76,15 +115,20 @@ const plugin = definePlugin({
       return { enabled: !!enabled, chatId: chatId || null };
     });
 
-    // ─── Action: save agent Telegram config (used by UI) ───
+    // ─── Action: save agent Telegram config ───
     ctx.actions.register("save-agent-telegram-config", async (params) => {
-      const { agentId, chatId, enabled } = params as { agentId: string; chatId: string; enabled: boolean };
+      const { agentId, chatId, enabled, notifyOnComplete, notifyOnFail, notifyOnBlocked } = params as {
+        agentId: string; chatId: string; enabled: boolean;
+        notifyOnComplete: boolean; notifyOnFail: boolean; notifyOnBlocked: boolean;
+      };
       if (!agentId) throw new Error("agentId required");
 
       await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_ENABLED }, enabled ? "1" : "");
+      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-complete" }, notifyOnComplete ? "1" : "0");
+      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-fail" }, notifyOnFail ? "1" : "0");
+      await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: "telegram-notify-blocked" }, notifyOnBlocked ? "1" : "0");
       if (chatId) {
         await ctx.state.set({ scopeKind: "agent", scopeId: agentId, stateKey: STATE_CHAT_ID }, chatId);
-        // Also store reverse mapping: chatId → agentId
         await ctx.state.set({ scopeKind: "instance", scopeId: "global", stateKey: `${STATE_CHAT_MAPPING}-${chatId}` }, agentId);
       }
 
