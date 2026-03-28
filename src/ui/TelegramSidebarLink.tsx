@@ -1,36 +1,17 @@
+/**
+ * TelegramSidebarLink — sidebar slot component.
+ * Paperclip renders this as a sidebar nav item and handles routing
+ * to the page automatically based on routePath in the manifest.
+ * The component just needs to render the label/icon.
+ */
 import React from "react";
-import { useHostContext } from "@paperclipai/plugin-sdk/ui/hooks";
+import type { PluginSidebarProps } from "@paperclipai/plugin-sdk/ui/types";
 
-export function TelegramSidebarLink() {
-  const { company, navigate } = useHostContext();
-  const companyPrefix = company?.issuePrefix;
-
-  const handleClick = () => {
-    if (companyPrefix && navigate) {
-      navigate(`/${companyPrefix}/telegram`);
-    }
-  };
-
+export function TelegramSidebarLink({ context }: PluginSidebarProps) {
   return (
-    <button
-      onClick={handleClick}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        width: "100%",
-        padding: "6px 12px",
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        fontSize: 13,
-        color: "inherit",
-        textAlign: "left",
-        borderRadius: 6,
-      }}
-    >
+    <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
       <span>📬</span>
       <span>Telegram</span>
-    </button>
+    </span>
   );
 }

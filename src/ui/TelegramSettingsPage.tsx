@@ -1,11 +1,10 @@
 /**
- * TelegramSettingsPage — a full page inside Paperclip for configuring
- * Telegram notifications per agent.
- *
- * Route: /<company>/telegram
+ * TelegramSettingsPage — page slot component.
+ * Paperclip renders this at /<companyPrefix>/telegram
  */
 import React, { useState, useEffect } from "react";
 import { usePluginData, usePluginAction, useHostContext } from "@paperclipai/plugin-sdk/ui/hooks";
+import type { PluginPageProps } from "@paperclipai/plugin-sdk/ui/types";
 
 interface Agent {
   id: string;
@@ -22,9 +21,8 @@ interface AgentTelegramConfig {
   notifyOnBlocked: boolean;
 }
 
-export function TelegramSettingsPage() {
-  const { company } = useHostContext();
-  const companyId = company?.id;
+export function TelegramSettingsPage({ context }: PluginPageProps) {
+  const companyId = context.companyId;
 
   const { data: agents, loading: agentsLoading } = usePluginData<Agent[]>(
     "agents-list",
@@ -53,14 +51,12 @@ export function TelegramSettingsPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [botInfo, setBotInfo] = useState<{ username: string } | null>(null);
 
-  // Load bot info on mount
   useEffect(() => {
     getBotInfo({})
-      .then((info: { username: string }) => setBotInfo(info))
+      .then((info: unknown) => setBotInfo(info as { username: string }))
       .catch(() => setBotInfo(null));
   }, []);
 
-  // When an agent is selected, load its config
   useEffect(() => {
     if (!selectedAgentId || !allConfigs) return;
     const config = allConfigs[selectedAgentId];
@@ -110,231 +106,146 @@ export function TelegramSettingsPage() {
   const selectedAgent = agents?.find((a) => a.id === selectedAgentId);
 
   if (agentsLoading || configsLoading) {
-    return <div style={styles.container}><p style={styles.muted}>Loading...</p></div>;
+    return <div style={s.container}><p style={s.muted}>Loading...</p></div>;
   }
 
   return (
-    <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>📬 Telegram Notifications</h1>
-          <p style={styles.subtitle}>
-            Configure which agents send Telegram messages and when.
-            {botInfo && (
-              <span style={styles.botBadge}>Bot: @{botInfo.username}</span>
-            )}
-          </p>
-        </div>
+    <div style={s.container}>
+      <div style={s.header}>
+        <h1 style={s.title}>📬 Telegram Notifications</h1>
+        <p style={s.subtitle}>
+          Configure which agents send Telegram messages and when.
+          {botInfo && <span style={s.botBadge}>Connected: @{botInfo.username}</span>}
+        </p>
       </div>
 
-      <div style={styles.layout}>
+      <div style={s.layout}>
         {/* Agent List */}
-        <div style={styles.sidebar}>
-          <h3 style={styles.sidebarTitle}>Agents</h3>
-          {!agents || agents.length === 0 ? (
-            <p style={styles.muted}>No agents found</p>
-          ) : (
-            agents.map((agent) => {
-              const config = allConfigs?.[agent.id];
-              const isEnabled = config?.enabled && config?.chatId;
-              return (
-                <div
-                  key={agent.id}
-                  onClick={() => setSelectedAgentId(agent.id)}
-                  style={{
-                    ...styles.agentRow,
-                    ...(selectedAgentId === agent.id ? styles.agentRowActive : {}),
-                  }}
-                >
-                  <div style={styles.agentName}>{agent.name}</div>
-                  <div style={styles.agentMeta}>
-                    {agent.role}
-                    {isEnabled && <span style={styles.enabledDot}>●</span>}
-                  </div>
+        <div style={s.agentList}>
+          <div style={s.listHeader}>Agents</div>
+          {(!agents || agents.length === 0) ? (
+            <p style={s.muted}>No agents found</p>
+          ) : agents.map((agent) => {
+            const cfg = allConfigs?.[agent.id];
+            const active = cfg?.enabled && !!cfg?.chatId;
+            return (
+              <div
+                key={agent.id}
+                onClick={() => setSelectedAgentId(agent.id)}
+                style={{ ...s.agentRow, ...(selectedAgentId === agent.id ? s.agentRowActive : {}) }}
+              >
+                <div style={s.agentName}>{agent.name}</div>
+                <div style={s.agentRole}>
+                  {agent.role}
+                  {active && <span style={s.activeDot}>●</span>}
                 </div>
-              );
-            })
-          )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Config Panel */}
-        <div style={styles.main}>
+        <div style={s.panel}>
           {!selectedAgentId ? (
-            <div style={styles.emptyState}>
-              <p>← Select an agent to configure Telegram notifications</p>
-            </div>
+            <div style={s.empty}>← Select an agent to configure Telegram</div>
           ) : (
-            <div>
-              <h2 style={styles.agentTitle}>{selectedAgent?.name}</h2>
+            <>
+              <h2 style={s.agentTitle}>{selectedAgent?.name}</h2>
 
-              {/* Enable toggle */}
-              <div style={styles.field}>
-                <label style={styles.checkLabel}>
-                  <input
-                    type="checkbox"
-                    checked={editState.enabled}
-                    onChange={(e) => setEditState({ ...editState, enabled: e.target.checked })}
-                    style={{ marginRight: 8 }}
-                  />
-                  Enable Telegram notifications for this agent
+              <div style={s.field}>
+                <label style={s.checkLabel}>
+                  <input type="checkbox" checked={editState.enabled}
+                    onChange={e => setEditState({ ...editState, enabled: e.target.checked })}
+                    style={{ marginRight: 8 }} />
+                  Enable Telegram notifications
                 </label>
               </div>
 
-              {/* Chat ID */}
-              <div style={styles.field}>
-                <label style={styles.label}>Telegram Chat ID</label>
-                <input
-                  type="text"
-                  value={editState.chatId || ""}
-                  onChange={(e) => setEditState({ ...editState, chatId: e.target.value })}
+              <div style={s.field}>
+                <label style={s.label}>Telegram Chat ID</label>
+                <input type="text" value={editState.chatId || ""}
+                  onChange={e => setEditState({ ...editState, chatId: e.target.value })}
                   placeholder="e.g. 991432117"
-                  style={styles.input}
-                  disabled={!editState.enabled}
-                />
-                <p style={styles.hint}>
-                  Send a message to{" "}
-                  <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={styles.link}>
-                    @userinfobot
-                  </a>{" "}
-                  on Telegram to find your Chat ID.
+                  style={s.input} disabled={!editState.enabled} />
+                <p style={s.hint}>
+                  Message <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={s.link}>@userinfobot</a> on Telegram to find your Chat ID.
                 </p>
               </div>
 
-              {/* Notification triggers */}
-              <div style={styles.field}>
-                <label style={styles.label}>Notify me when:</label>
-                <div style={styles.checkboxGroup}>
-                  <label style={styles.checkLabel}>
-                    <input
-                      type="checkbox"
-                      checked={editState.notifyOnComplete}
-                      onChange={(e) => setEditState({ ...editState, notifyOnComplete: e.target.checked })}
-                      disabled={!editState.enabled}
-                      style={{ marginRight: 8 }}
-                    />
-                    Run completes ✅
-                  </label>
-                  <label style={styles.checkLabel}>
-                    <input
-                      type="checkbox"
-                      checked={editState.notifyOnFail}
-                      onChange={(e) => setEditState({ ...editState, notifyOnFail: e.target.checked })}
-                      disabled={!editState.enabled}
-                      style={{ marginRight: 8 }}
-                    />
-                    Run fails ❌
-                  </label>
-                  <label style={styles.checkLabel}>
-                    <input
-                      type="checkbox"
-                      checked={editState.notifyOnBlocked}
-                      onChange={(e) => setEditState({ ...editState, notifyOnBlocked: e.target.checked })}
-                      disabled={!editState.enabled}
-                      style={{ marginRight: 8 }}
-                    />
-                    Agent gets blocked ⚠️
-                  </label>
+              <div style={s.field}>
+                <label style={s.label}>Notify me when:</label>
+                <div style={s.checkGroup}>
+                  {[
+                    { key: "notifyOnComplete", label: "Run completes ✅" },
+                    { key: "notifyOnFail", label: "Run fails ❌" },
+                    { key: "notifyOnBlocked", label: "Agent gets blocked ⚠️" },
+                  ].map(({ key, label }) => (
+                    <label key={key} style={s.checkLabel}>
+                      <input type="checkbox"
+                        checked={editState[key as keyof AgentTelegramConfig] as boolean}
+                        onChange={e => setEditState({ ...editState, [key]: e.target.checked })}
+                        disabled={!editState.enabled}
+                        style={{ marginRight: 8 }} />
+                      {label}
+                    </label>
+                  ))}
                 </div>
               </div>
 
-              {/* Actions */}
-              <div style={styles.actions}>
-                <button onClick={handleSave} disabled={saving} style={styles.primaryBtn}>
+              <div style={s.actions}>
+                <button onClick={handleSave} disabled={saving} style={s.primaryBtn}>
                   {saving ? "Saving..." : "Save"}
                 </button>
-                <button
-                  onClick={handleTest}
-                  disabled={testing || !editState.chatId || !editState.enabled}
-                  style={styles.secondaryBtn}
-                >
+                <button onClick={handleTest} disabled={testing || !editState.chatId || !editState.enabled} style={s.secondaryBtn}>
                   {testing ? "Sending..." : "Send Test"}
                 </button>
               </div>
 
               {message && (
-                <div style={message.type === "success" ? styles.successBox : styles.errorBox}>
-                  {message.text}
-                </div>
+                <div style={message.type === "success" ? s.success : s.error}>{message.text}</div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Setup guide */}
-      <div style={styles.guide}>
-        <strong>Quick Setup</strong>
-        <ol style={{ paddingLeft: 20, marginTop: 8, fontSize: 13 }}>
-          <li>Create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={styles.link}>@BotFather</a> and copy the token.</li>
-          <li>Go to <strong>Settings → Plugins → Telegram Notifications</strong> and paste the Bot Token.</li>
-          <li>Select an agent above, enter your Chat ID, and click <strong>Save</strong>.</li>
-          <li>Click <strong>Send Test</strong> to verify.</li>
-        </ol>
+      <div style={s.guide}>
+        <strong>Setup:</strong> Go to{" "}
+        <strong>Settings → Plugins → Telegram Notifications</strong> to set your Bot Token, then configure each agent above.
       </div>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: { padding: "24px 32px", fontFamily: "inherit", maxWidth: 900 },
-  header: { marginBottom: 24 },
+const s: Record<string, React.CSSProperties> = {
+  container: { padding: "24px 32px", fontFamily: "inherit", maxWidth: 860 },
+  header: { marginBottom: 20 },
   title: { fontSize: 20, fontWeight: 700, margin: "0 0 4px 0" },
   subtitle: { fontSize: 13, color: "#6b7280", margin: 0 },
-  botBadge: {
-    marginLeft: 10, fontSize: 12, background: "#dcfce7", color: "#166534",
-    padding: "2px 8px", borderRadius: 999, fontWeight: 500,
-  },
-  layout: { display: "flex", gap: 24, marginBottom: 24 },
-  sidebar: {
-    width: 200, flexShrink: 0,
-    border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden",
-  },
-  sidebarTitle: {
-    fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase",
-    padding: "10px 12px", borderBottom: "1px solid #f3f4f6", margin: 0,
-  },
-  agentRow: {
-    padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f3f4f6",
-    transition: "background 0.1s",
-  },
+  botBadge: { marginLeft: 10, fontSize: 12, background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: 999, fontWeight: 500 },
+  layout: { display: "flex", gap: 20, marginBottom: 20 },
+  agentList: { width: 190, flexShrink: 0, border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" },
+  listHeader: { fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, padding: "8px 12px", borderBottom: "1px solid #f3f4f6" },
+  agentRow: { padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f9fafb" },
   agentRowActive: { background: "#eff6ff" },
   agentName: { fontSize: 13, fontWeight: 500, color: "#111827" },
-  agentMeta: { fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", alignItems: "center", gap: 4 },
-  enabledDot: { color: "#22c55e", fontSize: 10 },
-  main: { flex: 1, border: "1px solid #e5e7eb", borderRadius: 8, padding: 20 },
-  emptyState: { color: "#9ca3af", fontSize: 13, padding: "40px 20px", textAlign: "center" },
-  agentTitle: { fontSize: 16, fontWeight: 600, marginTop: 0, marginBottom: 20 },
-  field: { marginBottom: 16 },
+  agentRole: { fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", alignItems: "center", gap: 4 },
+  activeDot: { color: "#22c55e", fontSize: 10 },
+  panel: { flex: 1, border: "1px solid #e5e7eb", borderRadius: 8, padding: 20 },
+  empty: { color: "#9ca3af", fontSize: 13, padding: "40px 0", textAlign: "center" as const },
+  agentTitle: { fontSize: 15, fontWeight: 600, marginTop: 0, marginBottom: 16 },
+  field: { marginBottom: 14 },
   label: { display: "block", fontSize: 13, fontWeight: 500, marginBottom: 6, color: "#374151" },
   checkLabel: { display: "flex", alignItems: "center", fontSize: 13, color: "#374151", cursor: "pointer" },
-  checkboxGroup: { display: "flex", flexDirection: "column" as const, gap: 8 },
-  input: {
-    width: "100%", padding: "8px 12px", fontSize: 13,
-    border: "1px solid #d1d5db", borderRadius: 6, boxSizing: "border-box" as const,
-  },
+  checkGroup: { display: "flex", flexDirection: "column" as const, gap: 8 },
+  input: { width: "100%", padding: "8px 12px", fontSize: 13, border: "1px solid #d1d5db", borderRadius: 6, boxSizing: "border-box" as const },
   hint: { fontSize: 11, color: "#9ca3af", marginTop: 4 },
-  actions: { display: "flex", gap: 8, marginBottom: 12 },
-  primaryBtn: {
-    padding: "8px 16px", fontSize: 13, fontWeight: 500,
-    background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer",
-  },
-  secondaryBtn: {
-    padding: "8px 16px", fontSize: 13, fontWeight: 500,
-    background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db",
-    borderRadius: 6, cursor: "pointer",
-  },
-  successBox: {
-    padding: "10px 14px", background: "#d1fae5", color: "#065f46",
-    borderRadius: 6, fontSize: 13,
-  },
-  errorBox: {
-    padding: "10px 14px", background: "#fee2e2", color: "#991b1b",
-    borderRadius: 6, fontSize: 13,
-  },
-  guide: {
-    padding: 16, background: "#f0f9ff", borderRadius: 8, fontSize: 13, color: "#0c4a6e",
-  },
+  actions: { display: "flex", gap: 8, marginBottom: 12, marginTop: 16 },
+  primaryBtn: { padding: "8px 16px", fontSize: 13, fontWeight: 500, background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" },
+  secondaryBtn: { padding: "8px 16px", fontSize: 13, fontWeight: 500, background: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db", borderRadius: 6, cursor: "pointer" },
+  success: { padding: "10px 14px", background: "#d1fae5", color: "#065f46", borderRadius: 6, fontSize: 13 },
+  error: { padding: "10px 14px", background: "#fee2e2", color: "#991b1b", borderRadius: 6, fontSize: 13 },
+  guide: { padding: 14, background: "#f0f9ff", borderRadius: 8, fontSize: 13, color: "#0c4a6e" },
   link: { color: "#2563eb" },
   muted: { color: "#9ca3af", fontSize: 13, padding: 12 },
 };
